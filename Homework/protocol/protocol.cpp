@@ -7,7 +7,7 @@
 
 #define IPv6_ADDR_LEN 128
 #define IPv6_ADDR_LEN_BYTES (IPv6_ADDR_LEN >> 3)
-
+#ifdef _DEBUG_
 static void display_address(in6_addr addr) {
   for(int k = 0; k < 16; ++k) {
     fprintf(stderr, "%02x", addr.s6_addr[k]);
@@ -16,7 +16,7 @@ static void display_address(in6_addr addr) {
   }
   fprintf(stderr, "\n");
 }
-
+#endif
 RipngErrorCode disassemble(const uint8_t *packet, uint32_t len,
                          RipngPacket *output) {
   ip6_hdr *header = (ip6_hdr *) packet;

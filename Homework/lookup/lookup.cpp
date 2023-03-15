@@ -5,7 +5,7 @@
 #include <vector>
 
 std::vector<RoutingTableEntry> IPEntries;
-
+#ifdef _DEBUG_
 static void display_address(in6_addr addr) {
   for(int k = 0; k < 16; ++k) {
     fprintf(stderr, "%02x", addr.s6_addr[k]);
@@ -14,7 +14,7 @@ static void display_address(in6_addr addr) {
   }
   fprintf(stderr, "\n");
 }
-
+#endif
 bool mask_equal(in6_addr addr, RoutingTableEntry entry) {
   in6_addr mask = len_to_mask(entry.len);
   in6_addr src_addr, dest_addr;
