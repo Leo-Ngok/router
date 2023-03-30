@@ -323,7 +323,10 @@ int main(int argc, char *argv[]) {
         // 检查是否为 RIPng packet
         RipngPacket ripng;
         RipngErrorCode err = disassemble(packet, res, &ripng);
+        if(err != SUCCESS)
+        fprintf(stderr, "RIPng packet parse status: %d\n", ripng_error_to_string(err));
         if (err == SUCCESS) {
+          fprintf(stderr, "ripng command = %d\n", (int) ripng.command);
           if (ripng.command == 1) {
             // 可选功能，实现了可以加快路由表收敛速度
             // Command 为 Request
