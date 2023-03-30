@@ -331,7 +331,6 @@ int main(int argc, char *argv[])
         RipngErrorCode err = disassemble(packet, res, &ripng);
         if (err == SUCCESS)
         {
-          // fprintf(stderr, "ripng command = %d\n", (int) ripng.command);
           if (ripng.command == 1)
           {
             // 可选功能，实现了可以加快路由表收敛速度 // TODO
@@ -348,6 +347,7 @@ int main(int argc, char *argv[])
             // 地址都应该指向发出请求的路由器
 
             // 最后把 RIPng 报文发送出去
+            SendRTEs(if_index, false, src_mac);
           }
           else
           { // ripng.command == 2
