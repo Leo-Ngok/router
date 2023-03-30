@@ -229,8 +229,8 @@ int main(int argc, char *argv[]) {
         ripng_rte *entry = (ripng_rte*) (((char *) ripng_header) + sizeof(ripng_hdr));
         // wrapping entries
         
-        fprintf(stderr, "----------------------------------------------\n");
-        fprintf(stderr, "Send routing table to interface %d\n", if_number);
+        //fprintf(stderr, "----------------------------------------------\n");
+        //fprintf(stderr, "Send routing table to interface %d\n", if_number);
         
         for(auto rte = RTableBegin(); rte != RTableEnd(); ++rte) {
           entry->prefix_or_nh = rte->addr;
@@ -243,7 +243,7 @@ int main(int argc, char *argv[]) {
           //ether_addr dest_addr;
           //HAL_GetNeighborMacAddress(if_number, rte->nexthop, &dest_addr);
           entry->metric = rte->if_index == if_number ? 16 : rte->metric;
-          fprintf(stderr, "Entry: %s/%d, metric = %d \n", inet6_ntoa(entry->prefix_or_nh), entry->prefix_len, entry->metric);
+          //fprintf(stderr, "Entry: %s/%d, metric = %d \n", inet6_ntoa(entry->prefix_or_nh), entry->prefix_len, entry->metric);
           entry++;
           if(++packet_rte_id == RIPNG_MAX_RTE) {
             encapsulate_packet(packet_rte_id, if_number);
@@ -324,9 +324,9 @@ int main(int argc, char *argv[]) {
         RipngPacket ripng;
         RipngErrorCode err = disassemble(packet, res, &ripng);
         if(err != SUCCESS)
-        fprintf(stderr, "RIPng packet parse status: %d\n", err);
+        //fprintf(stderr, "RIPng packet parse status: %d\n", err);
         if (err == SUCCESS) {
-          fprintf(stderr, "ripng command = %d\n", (int) ripng.command);
+          //fprintf(stderr, "ripng command = %d\n", (int) ripng.command);
           if (ripng.command == 1) {
             // 可选功能，实现了可以加快路由表收敛速度
             // Command 为 Request
@@ -360,9 +360,9 @@ int main(int argc, char *argv[]) {
               fprintf(stderr, "Routing entry discovered: %s, metric = %d\n", __res, entry.metric);
             }*/
             int curr = 0;
-            fprintf(stderr, "----------------------------------------------\n");
-            fprintf(stderr, "List of entries from interface %d discovered. There are total of %u\n", 
-            if_index, ripng.numEntries);
+            //fprintf(stderr, "----------------------------------------------\n");
+            //fprintf(stderr, "List of entries from interface %d discovered. There are total of %u\n", 
+            //if_index, ripng.numEntries);
             for (auto &&entry : ripng.entries)
             {
               if(curr++ >= ripng.numEntries)
@@ -384,7 +384,7 @@ int main(int argc, char *argv[]) {
               in6_addr next_hop;
               uint32_t if_idx;              
               const char* __res = inet6_ntoa(entry.prefix_or_nh);
-              fprintf(stderr, "Routing entry discovered: %s/%u, metric = %d\n", __res,(unsigned) entry.prefix_len, entry.metric);
+              //fprintf(stderr, "Routing entry discovered: %s/%u, metric = %d\n", __res,(unsigned) entry.prefix_len, entry.metric);
               auto mask = len_to_mask((unsigned)entry.prefix_len);
               if(!prefix_query(entry.prefix_or_nh, &next_hop, &if_idx)) {
                 // 插入到自己的路由表中，设置 nexthop
@@ -401,8 +401,8 @@ int main(int argc, char *argv[]) {
                   };
                   update(true, store);
                 } else {
-                  fprintf(stderr, "Next hop == 16, unreachable entry detected.\n");
-                  fprintf(stderr, "Now checks for poison reverse\n");
+                  //fprintf(stderr, "Next hop == 16, unreachable entry detected.\n");
+                  //fprintf(stderr, "Now checks for poison reverse\n");
                 }
               } else {
                 RoutingTableEntry *__entry = new RoutingTableEntry();
@@ -555,8 +555,8 @@ int main(int argc, char *argv[]) {
         // 按最长前缀匹配查询路由表
         in6_addr nexthop;
         uint32_t dest_if;
-        fprintf(stderr, "\n\n----------------------------------------------\n");
-        fprintf(stderr, "Forwarding packets\n");
+        //fprintf(stderr, "\n\n----------------------------------------------\n");
+        //fprintf(stderr, "Forwarding packets\n");
         if (prefix_query(ip6->ip6_dst, &nexthop, &dest_if)) {
           // 找到路由
           ether_addr dest_mac;
@@ -564,8 +564,8 @@ int main(int argc, char *argv[]) {
           if (nexthop == in6_addr{0}) {
             nexthop = ip6->ip6_dst;
           }
-          fprintf(stderr, "IPv6 packet destination = %s\n", inet6_ntoa(ip6->ip6_dst));
-          fprintf(stderr, "Next hop = %s, interface = %d\n", inet6_ntoa(nexthop), dest_if);
+          //fprintf(stderr, "IPv6 packet destination = %s\n", inet6_ntoa(ip6->ip6_dst));
+          //fprintf(stderr, "Next hop = %s, interface = %d\n", inet6_ntoa(nexthop), dest_if);
           if (HAL_GetNeighborMacAddress(dest_if, nexthop, &dest_mac) == 0) {
             // 在 NDP 表中找到了下一跳的 MAC 地址
             // TTL-1
@@ -613,8 +613,8 @@ int main(int argc, char *argv[]) {
         // 意味着发送的 ICMP Time Exceeded packet 大小不大于 IPv6 Minimum MTU
         // 不会因为 MTU 问题被丢弃。
         int n_payload = res < max_size ? res : max_size;
-        fprintf(stderr, "Source IP Address: %s\n", inet6_ntoa(eui64(local_mac)));
-        fprintf(stderr, "Dest   IP Address: %s\n", inet6_ntoa(ip6->ip6_src));
+        //fprintf(stderr, "Source IP Address: %s\n", inet6_ntoa(eui64(local_mac)));
+        //fprintf(stderr, "Dest   IP Address: %s\n", inet6_ntoa(ip6->ip6_src));
 
         // Step ONE: Setup Reply IP header.
         ip6_hdr *ip_header  = (ip6_hdr *) dump;

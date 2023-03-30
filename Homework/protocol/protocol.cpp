@@ -95,7 +95,7 @@ RipngErrorCode disassemble(const uint8_t *packet, uint32_t len,
       in6_addr mask = len_to_mask(entry->prefix_len);
       for(int j = 0; j < 16; ++j) {
         if((entry->prefix_or_nh & mask) != entry->prefix_or_nh) {
-          fprintf(stderr, "address prefix is %s, length = %d\n", inet6_ntoa(entry->prefix_or_nh),(int) entry->prefix_len);
+          //fprintf(stderr, "address prefix is %s, length = %d\n", inet6_ntoa(entry->prefix_or_nh),(int) entry->prefix_len);
           return RipngErrorCode::ERR_RIPNG_INCONSISTENT_PREFIX_LENGTH;
 
         }
