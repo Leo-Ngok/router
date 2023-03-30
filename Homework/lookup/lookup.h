@@ -4,7 +4,7 @@
 #include "common.h"
 #include <netinet/in.h>
 #include <stdint.h>
-
+#include <vector>
 /*
   表示路由表的一项。
   保证 addr 和 len 构成合法的网络前缀。
@@ -18,6 +18,8 @@ typedef struct {
   in6_addr nexthop;  // 下一跳的 IPv6 地址
   // TODO: 为了实现 RIPng 协议，
   // 在 router 作业中需要在这里添加额外的字段保存 metric
+  uint8_t metric;
+  uint16_t route_tag;
 } RoutingTableEntry;
 
 /**
@@ -52,5 +54,10 @@ int mask_to_len(const in6_addr mask);
  * @return len 合法则返回对应的 mask，不合法则返回 0
  */
 in6_addr len_to_mask(int len);
+
+bool query(const in6_addr addr, uint8_t prefix_len, RoutingTableEntry *entry) ;
+std::vector<RoutingTableEntry>::iterator RTableBegin();
+std::vector<RoutingTableEntry>::iterator RTableEnd();
+size_t TableSize();
 
 #endif

@@ -130,3 +130,28 @@ in6_addr len_to_mask(int len) {
   }
   return addr;
 }
+
+bool query(const in6_addr addr, uint8_t prefix_len, RoutingTableEntry *__entry) {
+  for(auto it = IPEntries.begin(); it != IPEntries.end(); ++it) {
+    if(it->addr == addr) {
+      if((uint32_t) prefix_len == it->len) {
+        *__entry = *it;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+
+std::vector<RoutingTableEntry>::iterator RTableBegin() {
+  return IPEntries.begin();
+}
+std::vector<RoutingTableEntry>::iterator RTableEnd() {
+  return IPEntries.end();
+}
+
+size_t TableSize() {
+  return IPEntries.size();
+}
+
