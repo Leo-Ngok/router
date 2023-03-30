@@ -324,7 +324,7 @@ int main(int argc, char *argv[]) {
         RipngPacket ripng;
         RipngErrorCode err = disassemble(packet, res, &ripng);
         if(err != SUCCESS)
-        fprintf(stderr, "RIPng packet parse status: %d\n", ripng_error_to_string(err));
+        fprintf(stderr, "RIPng packet parse status: %s\n", ripng_error_to_string(err));
         if (err == SUCCESS) {
           fprintf(stderr, "ripng command = %d\n", (int) ripng.command);
           if (ripng.command == 1) {
