@@ -109,7 +109,7 @@ static void encapsulate_packet(int n_rte_items, int __if_index, bool multicast, 
   // src ip
   reply_ip6->ip6_src = eui64(mac);
   // dst ip
-  reply_ip6->ip6_dst = inet6_pton("ff02::9");
+  reply_ip6->ip6_dst = multicast ? inet6_pton("ff02::9") : eui64(dst_mac);
 
   // Transport layer
   udphdr *udp = (udphdr *)&output[sizeof(ip6_hdr)];
@@ -239,64 +239,12 @@ int main(int argc, char *argv[])
     {
       // 提示：你可以打印完整的路由表到 stdout/stderr 来帮助调试。
       printf("5s Timer\n");
-      /*for(auto rte = RTableBegin(); rte != RTableEnd(); ++rte) {
-        printf("----------------------------------------\n");
-        printf("Route table entry: address = %s/%u\n", inet6_ntoa(rte->addr), rte->len);
-        printf("Next hop = %s\n", inet6_ntoa(rte->nexthop));
-        printf("Metric = %u\n",(unsigned) rte->metric);
-        printf("Interface = %d\n", rte->if_index);
-      }
-
-        printf("----------------------------------------\n");*/
-
       // TODO（40 行）-- Done
       // 这一步需要向所有 interface 发送当前的完整路由表，设置 Command 为
       // Response，
       // 并且注意当路由表表项较多时，需要拆分为多个 IPv6 packet。
       for (uint32_t if_number = 0; if_number < N_IFACE_ON_BOARD; ++if_number)
       {
-
-        /*ether_addr mac;
-        HAL_GetInterfaceMacAddress(if_number, &mac);
-        in6_addr link_local = eui64(mac);
-        // fprintf(stderr, "Link-local address to ethernet port %d: %s\n", if_number, inet6_ntoa(link_local));
-        //  Encapsulate packets top-down.
-        ripng_hdr *ripng_header = (ripng_hdr *)(output + sizeof(ip6_hdr) + sizeof(udphdr));
-        ripng_header->zero = 0;
-        ripng_header->version = 1;
-        ripng_header->command = 2;
-        // init entry pointer
-        int packet_rte_id = 0;
-        ripng_rte *entry = (ripng_rte *)(((char *)ripng_header) + sizeof(ripng_hdr));
-        // wrapping entries
-
-        // fprintf(stderr, "----------------------------------------------\n");
-        // fprintf(stderr, "Send routing table to interface %d\n", if_number);
-
-        for (auto rte = RTableBegin(); rte != RTableEnd(); ++rte)
-        {
-          entry->prefix_or_nh = rte->addr;
-          entry->prefix_len = rte->len;
-          entry->route_tag = rte->route_tag;
-          // 注意需要实现水平分割以及毒性反转（Split Horizon with Poisoned
-          // Reverse） 即，如果某一条路由表项是从 interface A 学习到的，那么发送给
-          // interface A 的 RIPng 表项中，该项的 metric 设为 16。详见 RFC 2080
-          // Section 2.6 Split Horizon。
-          // ether_addr dest_addr;
-          // HAL_GetNeighborMacAddress(if_number, rte->nexthop, &dest_addr);
-          entry->metric = rte->if_index == if_number ? 16 : rte->metric;
-          // fprintf(stderr, "Entry: %s/%d, metric = %d \n", inet6_ntoa(entry->prefix_or_nh), entry->prefix_len, entry->metric);
-          entry++;
-          if (++packet_rte_id == RIPNG_MAX_RTE)
-          {
-            encapsulate_packet(packet_rte_id, if_number, true, {0});
-            // reset entry pointer
-            ripng_rte *entry = (ripng_rte *)(((char *)ripng_header) + sizeof(ripng_hdr));
-            packet_rte_id = 0;
-          }
-        }
-        // Wrap up remaining entries
-        encapsulate_packet(packet_rte_id, if_number, true, {0});*/
         SendRTEs(if_number, true, {0});
       }
       last_time = time;
@@ -381,8 +329,6 @@ int main(int argc, char *argv[])
         // 检查是否为 RIPng packet
         RipngPacket ripng;
         RipngErrorCode err = disassemble(packet, res, &ripng);
-        // if(err != SUCCESS)
-        // fprintf(stderr, "RIPng packet parse status: %d\n", err);
         if (err == SUCCESS)
         {
           // fprintf(stderr, "ripng command = %d\n", (int) ripng.command);
@@ -409,22 +355,7 @@ int main(int argc, char *argv[])
             // Command 为 Response
             // 参考 RFC 2080 Section 2.4.2 Request Messages 实现
             // 按照接受到的 RIPng 表项更新自己的路由表
-            /*fprintf(stderr, "----------------------------------------------\n");
-            fprintf(stderr, "Let's have a brief look on IPv6 header\n");
-            fprintf(stderr, "flow = %u\n", ntohl(ip6->ip6_flow));
-            fprintf(stderr, "Payload length = %u\n", ntohs(ip6->ip6_plen));
-            fprintf(stderr, "Hop limit = %u\n", ip6->ip6_hops);
-            fprintf(stderr, "Source address = %s\n", inet6_ntoa(ip6->ip6_src));
-            fprintf(stderr, "This packet if from interface = %d\n", if_index);
-            //fprintf(stderr,"Display and give a brief look on routing table, that has %u entries.\n", ripng.numEntries);
-            /*for(auto &&entry : ripng.entries) {
-              const char* __res = inet6_ntoa(entry.prefix_or_nh);
-              fprintf(stderr, "Routing entry discovered: %s, metric = %d\n", __res, entry.metric);
-            }*/
             int curr = 0;
-            // fprintf(stderr, "----------------------------------------------\n");
-            // fprintf(stderr, "List of entries from interface %d discovered. There are total of %u\n",
-            // if_index, ripng.numEntries);
             for (auto &&entry : ripng.entries)
             {
               if (curr++ >= ripng.numEntries)
@@ -509,8 +440,6 @@ int main(int argc, char *argv[])
                 delete __entry;
               }
             }
-            // fprintf(stderr, "----------------------------------------------\n");
-
             // 可选功能：实现 Triggered //TODO
             // Updates，即在路由表出现更新的时候，向所有 interface
             // 发送出现变化的路由表项，注意此时依然要实现水平分割和毒性反转。详见
@@ -575,20 +504,6 @@ int main(int argc, char *argv[])
         uint8_t *dump = new uint8_t[MIN_MTU];
 
         // Step ZERO: Preparation.
-        in6_addr nexthop;
-        uint32_t src_if;
-        prefix_query(ip6->ip6_src, &nexthop, &src_if);
-
-        // When directly connected.
-        if (nexthop == in6_addr{0})
-        {
-          nexthop = ip6->ip6_src;
-        }
-        // ether_addr local_mac;
-
-        // HAL_GetInterfaceMacAddress(if_index, &local_mac);
-        // ether_addr target;
-        // HAL_GetNeighborMacAddress(if_index, nexthop, &target);
         //  1232 = IPv6 Minimum MTU(1280) - IPv6 Header(40) - ICMPv6 Header(8)
         uint8_t *payload = dump + sizeof(ip6_hdr) + sizeof(icmp6_hdr);
         const int max_size = MIN_MTU - sizeof(ip6_hdr) - sizeof(icmp6_hdr);
@@ -597,8 +512,6 @@ int main(int argc, char *argv[])
         // 意味着发送的 ICMP Time Exceeded packet 大小不大于 IPv6 Minimum MTU
         // 不会因为 MTU 问题被丢弃。
         int n_payload = res < max_size ? res : max_size;
-        // fprintf(stderr, "Source IP Address: %s\n", inet6_ntoa(eui64(local_mac)));
-        // fprintf(stderr, "Dest   IP Address: %s\n", inet6_ntoa(ip6->ip6_src));
 
         // Step ONE: Setup Reply IP header.
         ip6_hdr *ip_header = (ip6_hdr *)dump;
@@ -620,12 +533,9 @@ int main(int argc, char *argv[])
         {
           payload[it] = packet[it];
         }
-        // icmp_checksum(dump, n_payload);
         validateAndFillChecksum(dump, 0);
         // 详见 RFC 4443 Section 3.3 Time Exceeded Message
         // 计算 Checksum 后由自己的 IPv6 地址发送给源 IPv6 地址。
-        // fprintf(stderr, "src mac = %s\n", ether_ntoa(src_mac));
-        // fprintf(stderr, "target mac = %s\n", ether_ntoa(target));
         HAL_SendIPPacket(if_index, dump, sizeof(ip6_hdr) + ntohs(ip_header->ip6_plen), src_mac);
         delete[] dump;
       }
@@ -635,8 +545,6 @@ int main(int argc, char *argv[])
         // 按最长前缀匹配查询路由表
         in6_addr nexthop;
         uint32_t dest_if;
-        // fprintf(stderr, "\n\n----------------------------------------------\n");
-        // fprintf(stderr, "Forwarding packets\n");
         if (prefix_query(ip6->ip6_dst, &nexthop, &dest_if))
         {
           // 找到路由
@@ -646,8 +554,6 @@ int main(int argc, char *argv[])
           {
             nexthop = ip6->ip6_dst;
           }
-          // fprintf(stderr, "IPv6 packet destination = %s\n", inet6_ntoa(ip6->ip6_dst));
-          // fprintf(stderr, "Next hop = %s, interface = %d\n", inet6_ntoa(nexthop), dest_if);
           if (HAL_GetNeighborMacAddress(dest_if, nexthop, &dest_mac) == 0)
           {
             // 在 NDP 表中找到了下一跳的 MAC 地址
@@ -679,20 +585,6 @@ int main(int argc, char *argv[])
           uint8_t *dump = new uint8_t[MIN_MTU];
 
           // Step ZERO: Preparation.
-          in6_addr nexthop;
-          uint32_t src_if;
-          prefix_query(ip6->ip6_src, &nexthop, &src_if);
-
-          // When directly connected.
-          if (nexthop == in6_addr{0})
-          {
-            nexthop = ip6->ip6_src;
-          }
-          ether_addr local_mac;
-
-          HAL_GetInterfaceMacAddress(if_index, &local_mac);
-          ether_addr target;
-          HAL_GetNeighborMacAddress(if_index, nexthop, &target);
           // 1232 = IPv6 Minimum MTU(1280) - IPv6 Header(40) - ICMPv6 Header(8)
           uint8_t *payload = dump + sizeof(ip6_hdr) + sizeof(icmp6_hdr);
           const int max_size = MIN_MTU - sizeof(ip6_hdr) - sizeof(icmp6_hdr);
@@ -701,8 +593,6 @@ int main(int argc, char *argv[])
           // 意味着发送的 ICMP Time Exceeded packet 大小不大于 IPv6 Minimum MTU
           // 不会因为 MTU 问题被丢弃。
           int n_payload = res < max_size ? res : max_size;
-          // fprintf(stderr, "Source IP Address: %s\n", inet6_ntoa(eui64(local_mac)));
-          // fprintf(stderr, "Dest   IP Address: %s\n", inet6_ntoa(ip6->ip6_src));
 
           // Step ONE: Setup Reply IP header.
           ip6_hdr *ip_header = (ip6_hdr *)dump;
@@ -724,7 +614,6 @@ int main(int argc, char *argv[])
           {
             payload[it] = packet[it];
           }
-          // icmp_checksum(dump, n_payload);
           validateAndFillChecksum(dump, 0);
           // 详见 RFC 4443 Section 3.3 Time Exceeded Message
           // 计算 Checksum 后由自己的 IPv6 地址发送给源 IPv6 地址。
