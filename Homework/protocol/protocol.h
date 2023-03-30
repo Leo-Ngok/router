@@ -107,7 +107,7 @@ typedef struct {
   ripng_rte entries[RIPNG_MAX_RTE];
 } RipngPacket;
 
-static const char *ripng_error_to_string(RipngErrorCode err) {
+const char *ripng_error_to_string(RipngErrorCode err) {
   switch (err) {
   case RipngErrorCode::ERR_IPV6_NEXT_HEADER_NOT_UDP:
     return "IP next header field is not UDP";
