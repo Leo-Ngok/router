@@ -357,6 +357,9 @@ int main(int argc, char *argv[]) {
               fprintf(stderr, "Routing entry discovered: %s, metric = %d\n", __res, entry.metric);
             }*/
             int curr = 0;
+            fprintf(stderr, "----------------------------------------------\n");
+            fprintf(stderr, "List of entries from interface %d discovered. There are total of %u\n", 
+            if_index, ripng.numEntries);
             for (auto &&entry : ripng.entries)
             {
               if(curr++ >= ripng.numEntries)
@@ -378,7 +381,7 @@ int main(int argc, char *argv[]) {
               in6_addr next_hop;
               uint32_t if_idx;              
               const char* __res = inet6_ntoa(entry.prefix_or_nh);
-              //fprintf(stderr, "Routing entry discovered: %s/%u, metric = %d\n", __res,(unsigned) entry.prefix_len, entry.metric);
+              fprintf(stderr, "Routing entry discovered: %s/%u, metric = %d\n", __res,(unsigned) entry.prefix_len, entry.metric);
               auto mask = len_to_mask((unsigned)entry.prefix_len);
               if(!prefix_query(entry.prefix_or_nh, &next_hop, &if_idx)) {
                 // 插入到自己的路由表中，设置 nexthop
