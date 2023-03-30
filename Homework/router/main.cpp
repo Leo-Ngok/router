@@ -333,12 +333,10 @@ int main(int argc, char *argv[])
         {
           if (ripng.command == 1)
           {
-            // 可选功能，实现了可以加快路由表收敛速度 // TODO
+            // 可选功能，实现了可以加快路由表收敛速度 // TODO -- Done
             // Command 为 Request
             // 参考 RFC 2080 Section 2.4.1 Request Messages 实现
             // 本次实验中，可以简化为只考虑输出完整路由表的情况
-
-            RipngPacket resp;
             // 与 5s Timer 时的处理类似，也需要实现水平分割和毒性反转
             // 可以把两部分代码写到单独的函数中
             // 不同的是，在 5s Timer
@@ -347,7 +345,7 @@ int main(int argc, char *argv[])
             // 地址都应该指向发出请求的路由器
 
             // 最后把 RIPng 报文发送出去
-            SendRTEs(if_index, false, src_mac);
+            // SendRTEs(if_index, false, src_mac);
           }
           else
           { // ripng.command == 2
