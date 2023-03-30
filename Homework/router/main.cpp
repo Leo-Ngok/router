@@ -323,10 +323,10 @@ int main(int argc, char *argv[]) {
         // 检查是否为 RIPng packet
         RipngPacket ripng;
         RipngErrorCode err = disassemble(packet, res, &ripng);
-        if(err != SUCCESS)
-        fprintf(stderr, "RIPng packet parse status: %d\n", err);
+        //if(err != SUCCESS)
+        //fprintf(stderr, "RIPng packet parse status: %d\n", err);
         if (err == SUCCESS) {
-          fprintf(stderr, "ripng command = %d\n", (int) ripng.command);
+          //fprintf(stderr, "ripng command = %d\n", (int) ripng.command);
           if (ripng.command == 1) {
             // 可选功能，实现了可以加快路由表收敛速度
             // Command 为 Request
@@ -443,7 +443,7 @@ int main(int argc, char *argv[]) {
             
             
 
-            // 可选功能：实现 Triggered
+            // 可选功能：实现 Triggered //TODO
             // Updates，即在路由表出现更新的时候，向所有 interface
             // 发送出现变化的路由表项，注意此时依然要实现水平分割和毒性反转。详见
             // RFC 2080 Section 2.5.1。
@@ -581,7 +581,7 @@ int main(int argc, char *argv[]) {
                    inet6_ntoa(nexthop));
           }
         } else {
-          // TODO（40 行）
+          // TODO（40 行） -- Done
           // 没有找到路由
           // 发送 ICMPv6 Destination Unreachable 消息
           
