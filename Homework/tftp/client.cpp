@@ -120,11 +120,34 @@ struct transfer {
   // 最后一次传输的数据长度
   size_t last_block_size;
 };
-
+static void assemble_IP6_hdr(uint8_t *pkt_front, in6_addr &src, in6_addr &dst, size_t len, uint8_t nxt, uint8_t hops = 255) {
+  ip6_hdr *ip6 = (ip6_hdr *) pkt_front;
+  ip6->ip6_flow = 0;
+  ip6->ip6_vfc = 6 << 4;
+  ip6->ip6_plen = htons(len - sizeof(ip6_hdr));
+  ip6->ip6_nxt = nxt;
+  ip6->ip6_hops = hops;
+  ip6->ip6_src = src;
+  ip6->ip6_dst = dst;
+}
+static transfer *curr_tf;
+static void send_tftp_packet(uint8_t *pkt_front, ether_addr &dstmac,
+size_t len, bool init = false) {
+  const int if_number = 0;
+  const in6_addr src_addr = addrs[if_number];
+  len += sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr);
+  udphdr *out_udp = (udphdr *) &pkt_front[sizeof(ip6_hdr)];
+  out_udp->uh_dport = htons(init ? 69 : curr_tf->server_tid);
+  out_udp->uh_sport = htons(curr_tf->client_tid);
+  out_udp->uh_ulen  = htons(len - sizeof(ip6_hdr));
+  assemble_IP6_hdr(pkt_front, addrs[0], curr_tf->server_addr, len, IPPROTO_UDP);
+  validateAndFillChecksum(pkt_front, 0);
+  HAL_SendIPPacket(if_number, pkt_front, len, dstmac);
+}
 int main(int argc, char *argv[]) {
   // 记录当前的传输状态
   transfer current_transfer;
-
+  curr_tf = &current_transfer;
   // 初始化 HAL
   int res = HAL_Init(1, addrs);
   if (res < 0) {
@@ -206,57 +229,28 @@ int main(int argc, char *argv[]) {
 
         // 限制发送速度，每 1s 重试一次
         if (HAL_GetTicks() - last_time > 1000) {
-          // 构造响应的 IPv6 头部
-          // IPv6 header
-          ip6_hdr *reply_ip6 = (ip6_hdr *)&output[0];
-          // flow label
-          reply_ip6->ip6_flow = 0;
-          // version
-          reply_ip6->ip6_vfc = 6 << 4;
-          // next header
-          reply_ip6->ip6_nxt = IPPROTO_UDP;
-          // hop limit
-          reply_ip6->ip6_hlim = 255;
-          // src ip
-          reply_ip6->ip6_src = addrs[0];
-          // dst ip
-          reply_ip6->ip6_dst = current_transfer.server_addr;
-
-          udphdr *reply_udp = (udphdr *)&output[sizeof(ip6_hdr)];
-          // src port
-          reply_udp->uh_sport = htons(current_transfer.client_tid);
-          // dst port
-          reply_udp->uh_dport = htons(69);
-
-          uint8_t *reply_tftp =
-              (uint8_t *)&output[sizeof(ip6_hdr) + sizeof(udphdr)];
-          uint16_t tftp_len = 0;
-
+          uint16_t tftp_len = sizeof(ip6_hdr) + sizeof(udphdr);
+          tftp_hdr *out_tftp = (tftp_hdr *) &output[tftp_len];
           if (current_transfer.is_read) {
             // opcode = 0x01(read)
-            reply_tftp[tftp_len++] = 0x00;
-            reply_tftp[tftp_len++] = 0x01;
+            out_tftp->opcode = htons(1);
           } else {
             // opcode = 0x02(write)
-            reply_tftp[tftp_len++] = 0x00;
-            reply_tftp[tftp_len++] = 0x02;
+            out_tftp->opcode = htons(2);
           }
-
-          // TODO（4 行）
+          tftp_len += sizeof(uint16_t);
+          // TODO（4 行） -- Done
           // 文件名字段（argv[3]）
-
-          // TODO（4 行）
+          strcpy((char*) &output[tftp_len], argv[3]);
+          size_t payload_len = strlen(argv[3]) + 1;
+          tftp_len += payload_len; // NULL-terminated
+          // TODO（4 行） -- Done
           // 传输模式字段，设为 octet
-
-          // 根据 TFTP 消息长度，计算 UDP 和 IPv6 头部中的长度字段
-          uint16_t udp_len = tftp_len + sizeof(udphdr);
-          uint16_t ip_len = udp_len + sizeof(ip6_hdr);
-          reply_udp->uh_ulen = htons(udp_len);
-          reply_ip6->ip6_plen = htons(udp_len);
-          validateAndFillChecksum(output, ip_len);
-
-          HAL_SendIPPacket(0, output, ip_len, dest_mac);
-
+          strcpy((char *) &output[tftp_len], "octet");
+          tftp_len += 6;
+          payload_len += 6;
+          fprintf(stderr, "Sending packet whilst initializing..., tftp_len = %lu\n", payload_len);
+          send_tftp_packet(output, dest_mac, payload_len, true);
           last_time = HAL_GetTicks();
         }
       }
@@ -270,6 +264,7 @@ int main(int argc, char *argv[]) {
     int if_index;
     res = HAL_ReceiveIPPacket(mask, packet, sizeof(packet), &src_mac, &dst_mac,
                               1000, &if_index);
+    #pragma region PacketValidation
     if (res == HAL_ERR_EOF) {
       break;
     } else if (res < 0) {
@@ -285,12 +280,12 @@ int main(int argc, char *argv[]) {
     // 检查 IPv6 头部长度
     ip6_hdr *ip6 = (ip6_hdr *)packet;
     if (res < sizeof(ip6_hdr)) {
-      printf("Received invalid ipv6 packet (%d < %d)\n", res, sizeof(ip6_hdr));
+      printf("Received invalid ipv6 packet (%d < %lu)\n", res, sizeof(ip6_hdr));
       continue;
     }
     uint16_t plen = ntohs(ip6->ip6_plen);
     if (res < plen + sizeof(ip6_hdr)) {
-      printf("Received invalid ipv6 packet (%d < %d + %d)\n", res, plen,
+      printf("Received invalid ipv6 packet (%d < %d + %lu)\n", res, plen,
              sizeof(ip6_hdr));
       continue;
     }
@@ -303,7 +298,7 @@ int main(int argc, char *argv[]) {
         break;
       }
     }
-
+    #pragma endregion
     if (dst_is_me) {
       // 目的地址是我，按照类型进行处理
 
@@ -316,10 +311,10 @@ int main(int argc, char *argv[]) {
       }
 
       if (ip6->ip6_nxt == IPPROTO_UDP) {
-        // TODO（1 行）
+        // TODO（1 行） -- Done
         // 检查 UDP 端口，判断目的 UDP 端口是否等于客户端 TID
         udphdr *udp = (udphdr *)&packet[sizeof(ip6_hdr)];
-        if (false) {
+        if (ntohs(udp->uh_dport) == current_transfer.client_tid) {
 
           // 检查 UDP 端口，判断源 UDP 端口是否等于服务端 TID
           // 如果还不知道服务端 TID，即此时记录的服务端 TID 为 0
@@ -328,31 +323,33 @@ int main(int argc, char *argv[]) {
             current_transfer.server_tid = ntohs(udp->uh_sport);
             current_transfer.state = InTransfer;
           } else {
-            // TODO（1 行）
+            // TODO（1 行） -- Done
             // 检查 UDP 端口，如果源 UDP 端口不等于服务端 TID 则忽略
-            if (false) {
+            if (ntohs(udp->uh_sport) != current_transfer.server_tid) {
               continue;
             }
           }
 
-          // TODO（1 行）
+          // TODO（1 行） -- Done
           // 判断 Opcode
           tftp_hdr *tftp =
               (tftp_hdr *)&packet[sizeof(ip6_hdr) + sizeof(udphdr)];
           uint16_t opcode = ntohs(tftp->opcode);
           uint16_t block_number = ntohs(tftp->block_number);
-          if (false) {
+          if (opcode == 3) {
             // 如果 Opcode 是 0x03(DATA)
 
-            // TODO（1 行）
+            // TODO（1 行） -- Done
             // 判断 Block Number 是否等于最后一次传输的 Block Number 加一
-            if (false) {
-              // TODO（6 行）
+            if (block_number - current_transfer.last_block_number == 1) {
+              // TODO（6 行） -- Done
               // 如果等于，则把文件内容写到文件中
               // 并更新最后一次传输的 Block Number
-
-              uint16_t block_size = 0;
-
+              fprintf(stderr, "File packet received w/ length = %u\n",(uint32_t) ntohs(udp->uh_ulen));
+              uint16_t block_size = ntohs(udp->uh_ulen) - sizeof(udphdr) - sizeof(tftp_hdr);
+              uint8_t *payload = packet + sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr);
+              size_t bytes_written = fwrite(payload, sizeof(payload[0]), block_size, current_transfer.fp);
+              fprintf(stderr, "Bytes written = %lu\n", bytes_written);
               // 如果块的大小小于 512，说明这是最后一个块，写入文件后，
               // 关闭文件，发送 ACK 后就可以退出程序
               if (block_size < 512) {
@@ -363,36 +360,68 @@ int main(int argc, char *argv[]) {
             }
 
             // 发送 ACK，其 Block Number 为最后一次传输的 Block Number
-            // TODO（40 行）
+            // TODO（40 行） -- Done
+            tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
+            out_tftp->opcode = htons(4);
+            out_tftp->block_number = tftp->block_number;
+            fprintf(stderr, "Sending ACK..., block number = %u\n", (uint32_t) ntohs(tftp->block_number));
+            send_tftp_packet(output, src_mac, 0);
+           
+            current_transfer.last_block_number++;
 
           } else if (opcode == 4) {
             // 如果 Opcode 是 0x04(ACK)
-
-            // TODO（1 行）
+            fprintf(stderr, "Stored last ACK = %u, received last ACK %u\n", current_transfer.last_block_number,
+            block_number);
+            // TODO（1 行） -- Done
             // 判断 Block 编号
-            if (false) {
+            if (current_transfer.last_block_number == block_number) {
               // 如果 Block 编号和最后一次传输的块编号相等
               // 说明最后一次传输的块已经传输完成
 
-              // TODO（1 行）
+              // TODO（1 行） -- Done
               // 判断当前状态
-              if (false) {
-                // TODO（60 行）
+              if (current_transfer.state == InTransfer) {
+                // TODO（60 行） -- Done
                 // 如果是 InTransfer 状态，说明文件还没有传输完成，
                 // 则从文件中读取下一个 Block 并发送；
-
+                block_number++;
+                uint8_t *payload = &output[sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr)];
+                size_t bytes_read = fread(payload, sizeof(uint8_t), 512, current_transfer.fp);
+                // Encapsulates packet
+                tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
+                out_tftp->block_number = htons(block_number);
+                out_tftp->opcode = htons(3);
+                
+                fprintf(stderr, "Sending DATA packet with number of bytes = %lu ...\n", bytes_read);
+                send_tftp_packet(output, src_mac, bytes_read);
+                
                 // 如果读取的字节数不足 512，则进入 LastAck 状态
-
+                if(bytes_read < 512) 
+                  current_transfer.state = LastAck;
+                // Setup what last sent
+                memcpy(current_transfer.last_block_data, payload, bytes_read);
+                current_transfer.last_block_number = block_number;
+                current_transfer.last_block_size = bytes_read;
               } else if (current_transfer.state == LastAck) {
                 // 收到最后一个 ACK，说明文件传输完成
                 printf("Put file done\n");
                 done = true;
               }
             } else {
-              // TODO（45 行）
+              // TODO（45 行） -- Done
               // 如果 Block 编号和最后一次传输的块编号不相等
               // 说明最后一次传输的块没有传输成功
               // 重新发送最后一次传输的块
+              uint8_t *payload = &output[sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr)];
+              memcpy(payload, current_transfer.last_block_data, current_transfer.last_block_size);
+              // Encapsulates packet
+              tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
+              out_tftp->block_number = htons(current_transfer.last_block_number);
+              out_tftp->opcode = htons(3);
+
+              fprintf(stderr, "Resending last unsent packet, block number = %u...\n", (uint32_t) current_transfer.last_block_number);
+              send_tftp_packet(output, src_mac, current_transfer.last_block_size);
             }
           } else if (opcode == 5) {
             // 如果 Opcode 是 0x05(ERROR)
