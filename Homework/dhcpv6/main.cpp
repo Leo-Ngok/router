@@ -91,7 +91,7 @@ in6_addr dns_addrs[DNS_CNT] = {
 
 int main(int argc, char *argv[]) {
   // 初始化 HAL
-  int res = HAL_Init(1, addrs);
+  int res = HAL_Init(0, addrs);
   if (res < 0) {
     return res;
   }
@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) {
     // DHCPv6 Solicit 的组播目的地址（ff02::1:2）时也设置 dst_is_me 为 true。
     dst_is_me |= inet6_pton("ff02::2") == ip6->ip6_dst;
     dst_is_me |= inet6_pton("ff02::1:2") == ip6->ip6_dst;
-    fprintf(stderr, "IP packet received from %s, target = %s\n", inet6_ntoa(ip6->ip6_src), inet6_ntoa(ip6->ip6_dst));
+    //fprintf(stderr, "IP packet received from %s, target = %s\n", inet6_ntoa(ip6->ip6_src), inet6_ntoa(ip6->ip6_dst));
     if (dst_is_me) {
       // 目的地址是我，按照类型进行处理
 
@@ -207,15 +207,15 @@ int main(int argc, char *argv[]) {
             uint32_t iaid;
             #pragma region ReadPacketReceived
             size_t src_size = ntohs(ip6->ip6_plen) + sizeof(ip6_hdr);
-            fprintf(stderr, "Packet size = %lu\n", src_size);
+            //fprintf(stderr, "Packet size = %lu\n", src_size);
             while(src_offset < src_size) {
               
               dhcpv6_opt_hdr *opthdr = (dhcpv6_opt_hdr *) &packet[src_offset];
               uint16_t opt = ntohs(opthdr->option_code);
               src_offset += sizeof(dhcpv6_opt_hdr);
               uint16_t opt_len = ntohs(opthdr->option_len);
-              fprintf(stderr, "Option code = %d, Option len = %d\n", opt, opt_len);
-              fprintf(stderr, "Validating options, src_offset = %lu, \n", src_offset);
+              //fprintf(stderr, "Option code = %d, Option len = %d\n", opt, opt_len);
+              //fprintf(stderr, "Validating options, src_offset = %lu, \n", src_offset);
               display_options((uint8_t *) opthdr);
               /*for(int i = 0; i < opt_len; ++i) {
                 if(i % 16 == 0) fprintf(stderr, "\n");
@@ -416,8 +416,8 @@ int main(int argc, char *argv[]) {
           const char *read_dst_mac = ether_ntoa(dst_mac);
           const char *read_src_ip = inet6_ntoa(ip6->ip6_src); 
           const char *read_dst_ip = inet6_ntoa(ip6->ip6_dst);
-          fprintf(stderr, "Packet from MAC %s, dst MAC %s\n", read_src_mac, read_dst_mac);
-          fprintf(stderr, "Packet from IP %s, dst IP %s\n", read_src_ip, read_dst_ip);
+          //fprintf(stderr, "Packet from MAC %s, dst MAC %s\n", read_src_mac, read_dst_mac);
+          //fprintf(stderr, "Packet from IP %s, dst IP %s\n", read_src_ip, read_dst_ip);
           // 如果是 Router Solicitation，生成一个 Router Advertisement 并发送
           uint8_t *dump = new uint8_t[MIN_MTU];
           // ICMPv6 的各字段要求如下：
@@ -493,8 +493,8 @@ int main(int argc, char *argv[]) {
                inet6_ntoa(ip6->ip6_dst));
         continue;
       }
-      fprintf(stderr, "Packet from MAC %s, dst MAC %s\n", ether_ntoa(src_mac), ether_ntoa(dst_mac));
-      fprintf(stderr, "Packet received from IP %s, fwd to IP %s\n", inet6_ntoa(ip6->ip6_src), inet6_ntoa(ip6->ip6_dst));
+      //fprintf(stderr, "Packet from MAC %s, dst MAC %s\n", ether_ntoa(src_mac), ether_ntoa(dst_mac));
+      //fprintf(stderr, "Packet received from IP %s, fwd to IP %s\n", inet6_ntoa(ip6->ip6_src), inet6_ntoa(ip6->ip6_dst));
       // 检查 TTL（Hop Limit）是否小于或等于 1
       uint8_t ttl = ip6->ip6_hops;
       if (ttl <= 1) {

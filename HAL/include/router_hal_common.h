@@ -357,12 +357,12 @@ int HAL_SendIPPacket(HAL_IN int if_index, HAL_IN uint8_t *buffer,
   ether->ether_type = htons(0x86dd);
 
   memcpy(&eth_buffer[sizeof(ether_header)], buffer, length);
-  fprintf(stderr, "You attempt to send\n");
+  /*fprintf(stderr, "You attempt to send\n");
   for(int i = 0; i < length; ++i) {
     if(i % 16 == 0) fprintf(stderr, "\n");
     fprintf(stderr, "%02x ", eth_buffer[i + 14]);
   }
-  fprintf(stderr, "\n");
+  fprintf(stderr, "\n");*/
   if (pcap_inject(pcap_out_handles[if_index], eth_buffer,
                   length + sizeof(ether_header)) >= 0) {
     free(eth_buffer);
