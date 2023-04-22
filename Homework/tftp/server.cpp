@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) {
   // 记录当前所有的传输状态
 
   // 初始化 HAL
-  int res = HAL_Init(1, addrs);
+  int res = HAL_Init(0, addrs);
   if (res < 0) {
     return res;
   }
@@ -478,7 +478,7 @@ int main(int argc, char *argv[]) {
                     // 从 transfers 数组中移除当前传输
                     if (block_size < 512) {
                       fclose(current_transfer.fp);
-                      printf("File received \n");
+                      //printf("File received \n");
                       transfers.erase(transfers.begin() + i);
                       tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
                       out_tftp->opcode = htons(4);

@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) {
   transfer current_transfer;
   curr_tf = &current_transfer;
   // 初始化 HAL
-  int res = HAL_Init(1, addrs);
+  int res = HAL_Init(0, addrs);
   if (res < 0) {
     return res;
   }
@@ -354,7 +354,7 @@ int main(int argc, char *argv[]) {
               // 关闭文件，发送 ACK 后就可以退出程序
               if (block_size < 512) {
                 fclose(current_transfer.fp);
-                printf("Get file done\n");
+                //printf("Get file done\n");
                 done = true;
               }
             }
@@ -405,7 +405,7 @@ int main(int argc, char *argv[]) {
                 current_transfer.last_block_size = bytes_read;
               } else if (current_transfer.state == LastAck) {
                 // 收到最后一个 ACK，说明文件传输完成
-                printf("Put file done\n");
+                //printf("Put file done\n");
                 done = true;
               }
             } else {
