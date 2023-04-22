@@ -169,6 +169,7 @@ int main(int argc, char *argv[]) {
     // DHCPv6 Solicit 的组播目的地址（ff02::1:2）时也设置 dst_is_me 为 true。
     dst_is_me |= inet6_pton("ff02::2") == ip6->ip6_dst;
     dst_is_me |= inet6_pton("ff02::1:2") == ip6->ip6_dst;
+    fprintf(stderr, "IP packet received from %s, target = %s\n", inet6_ntoa(ip6->ip6_src), inet6_ntoa(ip6->ip6_dst));
     if (dst_is_me) {
       // 目的地址是我，按照类型进行处理
 
@@ -357,7 +358,7 @@ int main(int argc, char *argv[]) {
             //      - IPv6 Address: fd00::1:2 ** switch to fd00::3:2 ?
             in6_addr assign_ip;
             get_new_ip(&assign_ip);
-            iaaddr_hdr->ip = assign_ip;
+            iaaddr_hdr->ip = inet6_pton("fd00::1:2");//assign_ip;
             //      - Preferred lifetime: 54000s
             iaaddr_hdr->pref_lft = ntohl(54000);
             //      - Valid lifetime: 86400s
