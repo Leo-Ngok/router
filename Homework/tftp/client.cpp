@@ -249,7 +249,7 @@ int main(int argc, char *argv[]) {
           strcpy((char *) &output[tftp_len], "octet");
           tftp_len += 6;
           payload_len += 6;
-          fprintf(stderr, "Sending packet whilst initializing..., tftp_len = %lu\n", payload_len);
+          //fprintf(stderr, "Sending packet whilst initializing..., tftp_len = %lu\n", payload_len);
           send_tftp_packet(output, dest_mac, payload_len, true);
           last_time = HAL_GetTicks();
         }
@@ -345,11 +345,11 @@ int main(int argc, char *argv[]) {
               // TODO（6 行） -- Done
               // 如果等于，则把文件内容写到文件中
               // 并更新最后一次传输的 Block Number
-              fprintf(stderr, "File packet received w/ length = %u\n",(uint32_t) ntohs(udp->uh_ulen));
+              //fprintf(stderr, "File packet received w/ length = %u\n",(uint32_t) ntohs(udp->uh_ulen));
               uint16_t block_size = ntohs(udp->uh_ulen) - sizeof(udphdr) - sizeof(tftp_hdr);
               uint8_t *payload = packet + sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr);
               size_t bytes_written = fwrite(payload, sizeof(payload[0]), block_size, current_transfer.fp);
-              fprintf(stderr, "Bytes written = %lu\n", bytes_written);
+              //fprintf(stderr, "Bytes written = %lu\n", bytes_written);
               // 如果块的大小小于 512，说明这是最后一个块，写入文件后，
               // 关闭文件，发送 ACK 后就可以退出程序
               if (block_size < 512) {
@@ -364,14 +364,14 @@ int main(int argc, char *argv[]) {
             tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
             out_tftp->opcode = htons(4);
             out_tftp->block_number = tftp->block_number;
-            fprintf(stderr, "Sending ACK..., block number = %u\n", (uint32_t) ntohs(tftp->block_number));
+            //fprintf(stderr, "Sending ACK..., block number = %u\n", (uint32_t) ntohs(tftp->block_number));
             send_tftp_packet(output, src_mac, 0);
            
             current_transfer.last_block_number++;
 
           } else if (opcode == 4) {
             // 如果 Opcode 是 0x04(ACK)
-            fprintf(stderr, "Stored last ACK = %u, received last ACK %u\n", current_transfer.last_block_number,
+            //fprintf(stderr, "Stored last ACK = %u, received last ACK %u\n", current_transfer.last_block_number,
             block_number);
             // TODO（1 行） -- Done
             // 判断 Block 编号
@@ -393,7 +393,7 @@ int main(int argc, char *argv[]) {
                 out_tftp->block_number = htons(block_number);
                 out_tftp->opcode = htons(3);
                 
-                fprintf(stderr, "Sending DATA packet with number of bytes = %lu ...\n", bytes_read);
+                //fprintf(stderr, "Sending DATA packet with number of bytes = %lu ...\n", bytes_read);
                 send_tftp_packet(output, src_mac, bytes_read);
                 
                 // 如果读取的字节数不足 512，则进入 LastAck 状态
@@ -420,7 +420,7 @@ int main(int argc, char *argv[]) {
               out_tftp->block_number = htons(current_transfer.last_block_number);
               out_tftp->opcode = htons(3);
 
-              fprintf(stderr, "Resending last unsent packet, block number = %u...\n", (uint32_t) current_transfer.last_block_number);
+              //fprintf(stderr, "Resending last unsent packet, block number = %u...\n", (uint32_t) current_transfer.last_block_number);
               send_tftp_packet(output, src_mac, current_transfer.last_block_size);
             }
           } else if (opcode == 5) {
