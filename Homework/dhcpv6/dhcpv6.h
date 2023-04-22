@@ -1,5 +1,5 @@
 #include <stdint.h>
-
+#include <stdio.h>
 struct dhcpv6_hdr {
   // 1-byte message type
   uint8_t msg_type;
