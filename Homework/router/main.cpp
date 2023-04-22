@@ -110,7 +110,7 @@ static void encapsulate_packet(int n_rte_items, int __if_index, bool multicast, 
   reply_ip6->ip6_src = eui64(mac);
   // dst ip
   reply_ip6->ip6_dst = multicast ? inet6_pton("ff02::9") : eui64(dst_mac);
-
+  
   // Transport layer
   udphdr *udp = (udphdr *)&output[sizeof(ip6_hdr)];
   // dst port
@@ -120,13 +120,6 @@ static void encapsulate_packet(int n_rte_items, int __if_index, bool multicast, 
 
   udp->uh_ulen = htons((uint16_t)size);
 
-  uint16_t sum = 0;
-  /* Step two: calculate payload sum */
-  // calculate udp header
-  sum += ntohs(udp->uh_dport);
-  sum += ntohs(udp->uh_sport);
-  sum += ntohs(udp->uh_ulen);
-  // calculate udp payload
   auto *payload_ptr = packet + sizeof(struct ip6_hdr) + sizeof(udphdr);
 
   // Fill in remaining ripng header
@@ -238,7 +231,7 @@ int main(int argc, char *argv[])
     if (time > last_time + 5 * 1000)
     {
       // 提示：你可以打印完整的路由表到 stdout/stderr 来帮助调试。
-      printf("5s Timer\n");
+      // printf("5s Timer\n");
       // TODO（40 行）-- Done
       // 这一步需要向所有 interface 发送当前的完整路由表，设置 Command 为
       // Response，
