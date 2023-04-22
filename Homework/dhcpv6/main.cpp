@@ -216,7 +216,7 @@ int main(int argc, char *argv[]) {
               uint16_t opt_len = ntohs(opthdr->option_len);
               //fprintf(stderr, "Option code = %d, Option len = %d\n", opt, opt_len);
               //fprintf(stderr, "Validating options, src_offset = %lu, \n", src_offset);
-              display_options((uint8_t *) opthdr);
+              //display_options((uint8_t *) opthdr);
               /*for(int i = 0; i < opt_len; ++i) {
                 if(i % 16 == 0) fprintf(stderr, "\n");
                 fprintf(stderr, "%02x ", packet[src_offset + i]);
