@@ -372,7 +372,7 @@ int main(int argc, char *argv[]) {
           } else if (opcode == 4) {
             // 如果 Opcode 是 0x04(ACK)
             //fprintf(stderr, "Stored last ACK = %u, received last ACK %u\n", current_transfer.last_block_number,
-            block_number);
+            //block_number);
             // TODO（1 行） -- Done
             // 判断 Block 编号
             if (current_transfer.last_block_number == block_number) {
