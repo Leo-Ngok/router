@@ -238,3 +238,68 @@ struct dhcpv6_opt_iaaddr_hdr {
 #define DUID_UUID 4
 
 #endif
+
+#ifndef DISP_DHCPV6_OPT_FIELD
+#define DISP_DHCPV6_OPT_FIELD
+void display_options(uint8_t *head) {
+  uint16_t option = ntohs(*(uint16_t *)(head));
+  uint16_t len = ntohs(*(uint16_t *)(head + 2));
+  switch (option)
+  {
+  case DHCPV6_OPT_CLIENTID:
+    fprintf(stderr, "Client ID received\n");
+    fprintf(stderr, "Client DUID = ");
+    for(int i = 0; i < len; ++i) {
+      fprintf(stderr, "%02x ", head[i + 4]);
+    }
+    fprintf(stderr,"\n");
+    break;
+  case DHCPV6_OPT_ELAPSED_TIME:
+  fprintf(stderr, "Elapsed time received\n");
+    fprintf(stderr, "Time elapsed: %d\n", ntohs(*(uint16_t *)(head + 4)));
+    break;
+  case DHCPV6_OPT_VENDOR_CLASS:
+    fprintf(stderr, "Vendor class received\n");
+    fprintf(stderr, "Enterprise number: %u\n", ntohl(*(uint32_t *)(head + 4)));
+      fprintf(stderr, "Vendor data:\n");
+    for(int i = 10; i < len; ++i) {
+      fprintf(stderr, "%c", head[i]);
+    }
+    fprintf(stderr, "\n");
+    break;
+  case DHCPV6_OPT_RAPID_COMMIT:
+    fprintf(stderr, "Rapid commit received\n");
+    break;
+  case DHCPV6_OPT_IA_NA: {
+    fprintf(stderr, "IA-NA option received\n");
+    int curr_offset = 0;
+    dhcpv6_opt_iana_hdr *hdr = (dhcpv6_opt_iana_hdr *) head;
+    fprintf(stderr, "IAID = %04x, T1 = %d, T2 = %d\n", ntohl(hdr->iaid), hdr->t1, hdr->t2);
+    curr_offset += sizeof(dhcpv6_opt_iana_hdr);
+    for(int i = 0; i < ntohs(hdr->opts.option_len); ++i) {
+      fprintf(stderr, "%02x ", head[curr_offset+i]);
+    }
+    fprintf(stderr, "\n");
+    break;
+  }
+  case DHCPV6_OPT_CLIENT_FQDN: {
+    break;
+  }
+  case DHCPV6_OPT_RECONF_ACCEPT: {
+    fprintf(stderr, "Reconfigure accept received\n");
+    break;
+  }
+  case DHCPV6_OPT_ORO: {
+    fprintf(stderr, "option request option received\n");
+    uint16_t *optptr = (uint16_t *)(head + 4);
+    for(int i = 0; i < len / 2; ++i ){  
+      fprintf(stderr, "Option %d: %d\n", i, ntohs(optptr[i]));
+    }
+    break;
+
+  }
+  default:
+    break;
+  }
+}
+#endif 

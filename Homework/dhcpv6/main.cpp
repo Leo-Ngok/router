@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
     // 组播目的地址（ff02::2，all-routers multicast address）或者
     // DHCPv6 Solicit 的组播目的地址（ff02::1:2）时也设置 dst_is_me 为 true。
     dst_is_me |= inet6_pton("ff02::2") == ip6->ip6_dst;
-
+    dst_is_me |= inet6_pton("ff02::1:2") == ip6->ip6_dst;
     if (dst_is_me) {
       // 目的地址是我，按照类型进行处理
 
@@ -186,7 +186,7 @@ int main(int argc, char *argv[]) {
         size_t curr_offset = sizeof(ip6_hdr);
         udphdr *udp = (udphdr *)&packet[curr_offset];
         curr_offset += sizeof(udphdr);
-        if (ntohs(udp->uh_dport) == 547) {
+        if (ntohs(udp->uh_sport) == 546 && ntohs(udp->uh_dport) == 547) {
           dhcpv6_hdr *dhcpv6 =
               (dhcpv6_hdr *)&packet[curr_offset];
           // TODO（1 行） -- Done
@@ -198,17 +198,29 @@ int main(int argc, char *argv[]) {
             // 和 IA_NA 中的 IAID
             // https://www.rfc-editor.org/rfc/rfc8415.html#section-21.2
             // https://www.rfc-editor.org/rfc/rfc8415.html#section-21.4
-            size_t src_offset = curr_offset;
 
-            uint8_t client_duid[128];
-            size_t client_duid_len;
+            size_t src_offset = curr_offset + sizeof(dhcpv6_hdr);
+
+            uint8_t client_duid[128] = {};
+            size_t client_duid_len = 0;
             uint32_t iaid;
             #pragma region ReadPacketReceived
             size_t src_size = ntohs(ip6->ip6_plen) + sizeof(ip6_hdr);
+            fprintf(stderr, "Packet size = %lu\n", src_size);
             while(src_offset < src_size) {
+              
               dhcpv6_opt_hdr *opthdr = (dhcpv6_opt_hdr *) &packet[src_offset];
               uint16_t opt = ntohs(opthdr->option_code);
               src_offset += sizeof(dhcpv6_opt_hdr);
+              uint16_t opt_len = ntohs(opthdr->option_len);
+              fprintf(stderr, "Option code = %d, Option len = %d\n", opt, opt_len);
+              fprintf(stderr, "Validating options, src_offset = %lu, \n", src_offset);
+              display_options((uint8_t *) opthdr);
+              /*for(int i = 0; i < opt_len; ++i) {
+                if(i % 16 == 0) fprintf(stderr, "\n");
+                fprintf(stderr, "%02x ", packet[src_offset + i]);
+              }
+              fprintf(stderr, "\n");*/
               switch (opt)
               {
               case DHCPV6_OPT_CLIENTID: {
@@ -216,7 +228,6 @@ int main(int argc, char *argv[]) {
                 for(int i = 0; i < client_duid_len; ++i) {
                   client_duid[i] = packet[src_offset + i];
                 }
-                
                 break;
               }
               /*case DHCPV6_OPT_SERVERID: {
@@ -242,7 +253,7 @@ int main(int argc, char *argv[]) {
               default:
                 break;
               }
-              src_offset += ntohs(opthdr->option_len);
+              src_offset += opt_len;
             }
             #pragma endregion
             dhcpv6_hdr *reply_dhcpv6 =
@@ -274,7 +285,7 @@ int main(int argc, char *argv[]) {
             #pragma region FillServerID
             // 1. Server Identifier：根据本路由器在本接口上的 MAC 地址生成。
             //    - https://www.rfc-editor.org/rfc/rfc8415.html#section-21.3
-            dhcpv6_opt_hdr *opthdr = (dhcpv6_opt_hdr *) &packet[curr_offset];
+            dhcpv6_opt_hdr *opthdr = (dhcpv6_opt_hdr *) &output[curr_offset];
             const uint16_t serv_id_optsize = sizeof(dhcpv6_duid_hdr) + sizeof(uint32_t) + sizeof(ether_addr);
             
             //    - Option Code: 2
@@ -283,21 +294,21 @@ int main(int argc, char *argv[]) {
             opthdr->option_len = htons(serv_id_optsize);
             curr_offset += sizeof(dhcpv6_opt_hdr);
 
-            dhcpv6_duid_hdr *server_duid_hdr = (dhcpv6_duid_hdr *) &packet[curr_offset];
+            dhcpv6_duid_hdr *server_duid_hdr = (dhcpv6_duid_hdr *) &output[curr_offset];
             //    - DUID Type: 1 (Link-layer address plus time)
             //    - Hardware Type: 1 (Ethernet)
             server_duid_hdr->type = htons(DUID_LLT);
             server_duid_hdr->hardware = htons(ARPHRD_ETHER);
             curr_offset += sizeof(dhcpv6_duid_hdr);
 
-            uint32_t* duid_time = (uint32_t *) &packet[curr_offset];
+            uint32_t* duid_time = (uint32_t *) &output[curr_offset];
             //    - DUID Time: 0
             *duid_time = 0;
             curr_offset += sizeof(uint32_t);
             
             ether_addr port_mac;
             HAL_GetInterfaceMacAddress(if_index, &port_mac);
-            ether_addr *serv_addr = (ether_addr *) &packet[curr_offset];
+            ether_addr *serv_addr = (ether_addr *) &output[curr_offset];
             //    - Link layer address: MAC Address
             *serv_addr = port_mac;
             curr_offset += sizeof(ether_addr);
@@ -305,7 +316,7 @@ int main(int argc, char *argv[]) {
             #pragma region FillClientID
             // 2. Client Identifier
             //    - https://www.rfc-editor.org/rfc/rfc8415.html#section-21.2
-            opthdr = (dhcpv6_opt_hdr *) &packet[curr_offset];
+            opthdr = (dhcpv6_opt_hdr *) &output[curr_offset];
             //    - Option Code: 1
             opthdr->option_code = htons(DHCPV6_OPT_CLIENTID);
             //    - Option Length: 和 Solicit/Request 中的 Client Identifier
@@ -314,7 +325,7 @@ int main(int argc, char *argv[]) {
             curr_offset += sizeof(dhcpv6_opt_hdr);
             //    - DUID: 和 Solicit/Request 中的 Client Identifier 一致
             for(int i = 0; i < client_duid_len; ++i) {
-              packet[i + curr_offset] = client_duid[i];
+              output[i + curr_offset] = client_duid[i];
             } 
             curr_offset += client_duid_len;
             #pragma endregion
@@ -322,7 +333,7 @@ int main(int argc, char *argv[]) {
             // 3. Identity Association for Non-temporary
             // Address：记录服务器将会分配给客户端的 IPv6 地址。
             //    - https://www.rfc-editor.org/rfc/rfc8415.html#section-21.4
-            dhcpv6_opt_iana_hdr *iana_hdr = (dhcpv6_opt_iana_hdr *) &packet[curr_offset];
+            dhcpv6_opt_iana_hdr *iana_hdr = (dhcpv6_opt_iana_hdr *) &output[curr_offset];
             //    - Option Code: 3
             iana_hdr->opts.option_code = htons(DHCPV6_OPT_IA_NA); 
             const uint32_t iana_len = sizeof(dhcpv6_opt_iana_hdr) - sizeof(dhcpv6_opt_hdr) + sizeof(dhcpv6_opt_iaaddr_hdr);
@@ -338,7 +349,7 @@ int main(int argc, char *argv[]) {
             curr_offset += sizeof(dhcpv6_opt_iana_hdr);
             //    - IA_NA options:
             //      - https://www.rfc-editor.org/rfc/rfc8415.html#section-21.6
-            dhcpv6_opt_iaaddr_hdr *iaaddr_hdr = (dhcpv6_opt_iaaddr_hdr *) &packet[curr_offset];
+            dhcpv6_opt_iaaddr_hdr *iaaddr_hdr = (dhcpv6_opt_iaaddr_hdr *) &output[curr_offset];
             //      - Option code: 5 (IA address)
             iaaddr_hdr->opts.option_code = htons(DHCPV6_OPT_IAADDR);
             //      - Length: 24
@@ -357,7 +368,7 @@ int main(int argc, char *argv[]) {
             // 4. DNS recursive name server：包括两个 DNS 服务器地址
             // 2402:f000:1:801::8:28 和 2402:f000:1:801::8:29。
             //    - https://www.rfc-editor.org/rfc/rfc3646#section-3
-            opthdr = (dhcpv6_opt_hdr *) &packet[curr_offset];
+            opthdr = (dhcpv6_opt_hdr *) &output[curr_offset];
             //    - Option Code: 23
             opthdr->option_code = htons(DHCPV6_OPT_DNS_SERVERS);
             //    - Option Length: 32
@@ -366,7 +377,7 @@ int main(int argc, char *argv[]) {
             
             //    - DNS: 2402:f000:1:801::8:28 <-- THU Shoool DNS IP address
             //    - DNS: 2402:f000:1:801::8:29
-            in6_addr *dns_addr = (in6_addr *) &packet[curr_offset];
+            in6_addr *dns_addr = (in6_addr *) &output[curr_offset];
             for(int i = 0; i < DNS_CNT; ++i) {
               dns_addr[i] = dns_addrs[i];
             }
