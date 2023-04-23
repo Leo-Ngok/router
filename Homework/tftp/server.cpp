@@ -97,7 +97,9 @@ enum TransferState {
   // 传输完毕，等待最后一个 ACK
   LastAck,
 };
-
+#ifndef MAX_BUF_SIZE
+#define MAX_BUF_SIZE 2097142
+#endif
 struct transfer {
   // 读还是写
   bool is_read;
@@ -117,6 +119,8 @@ struct transfer {
   uint8_t last_block_data[512];
   // 最后一次传输的数据长度
   size_t last_block_size;
+  uint8_t *buffer;
+  size_t file_size = 0;
 };
 static void assemble_IP6_hdr(uint8_t *pkt_front, in6_addr &src, in6_addr &dst, size_t len, uint8_t nxt, uint8_t hops = 255) {
   ip6_hdr *ip6 = (ip6_hdr *) pkt_front;
@@ -144,6 +148,12 @@ size_t len, transfer &curr_tf) {
   assemble_IP6_hdr(pkt_front, in_ip6hdr->ip6_dst, curr_tf.client_addr, len, IPPROTO_UDP);
   validateAndFillChecksum(pkt_front, 0);
   HAL_SendIPPacket(if_number, pkt_front, len, dstmac);
+}
+
+
+// Use when client request to read a file
+void init_buffer(transfer &tf) {
+  tf.file_size = fread(tf.buffer, 1, MAX_BUF_SIZE, tf.fp);
 }
 int main(int argc, char *argv[]) {
   // 记录当前所有的传输状态
@@ -184,6 +194,7 @@ int main(int argc, char *argv[]) {
     ether_addr src_mac;
     ether_addr dst_mac;
     int if_index;
+    #pragma region PacketValidation
     res = HAL_ReceiveIPPacket(mask, packet, sizeof(packet), &src_mac, &dst_mac,
                               1000, &if_index);
     if (res == HAL_ERR_EOF) {
@@ -219,7 +230,7 @@ int main(int argc, char *argv[]) {
         break;
       }
     }
-
+    #pragma endregion
     if (dst_is_me) {
       // 目的地址是我，按照类型进行处理
 
@@ -258,6 +269,7 @@ int main(int argc, char *argv[]) {
             new_transfer.server_tid = 49152 + (rand() % 16384);
             // 记录下客户端的 IPv6 地址。
             new_transfer.client_addr = ip6->ip6_src;
+            new_transfer.buffer = new uint8_t[MAX_BUF_SIZE];
             // 此后服务端向客户端发送的 UDP 数据报，
             // 其源 UDP 端口都为服务端 TID，
             // 其目的 UDP 端口都为客户端 TID，
@@ -272,16 +284,19 @@ int main(int argc, char *argv[]) {
               // 尝试打开文件，判断文件是否存在
               new_transfer.fp = fopen(file_name, "rb");
               if (new_transfer.fp != nullptr) {
+                init_buffer(new_transfer);
+                fclose(new_transfer.fp);
                 // 如果文件存在，则发送文件的第一个块。
 
                 // 从文件中读取最多 512 字节的数据
                 uint8_t block[512];
-                size_t block_size = fread(block, 1, 512, new_transfer.fp);
-
+                //size_t block_size =  fread(block, 1, 512, new_transfer.fp);
+                size_t block_size = new_transfer.file_size < 512 ? new_transfer.file_size : 512;
+                memcpy(block, new_transfer.buffer, block_size);
                 // 把最后一次发送的块记录下来
                 // 用于重传
                 new_transfer.last_block_number = 1;
-                memcpy(new_transfer.last_block_data, block, block_size);
+                //memcpy(new_transfer.last_block_data, block, block_size);
                 new_transfer.last_block_size = block_size;
 
                 // 构造响应的 IPv6 头部
@@ -361,6 +376,7 @@ int main(int argc, char *argv[]) {
               new_transfer.is_read = false;
               new_transfer.fp = fopen(file_name, "r");
               if (new_transfer.fp) {
+                fclose(new_transfer.fp);
                 // TODO（50 行） -- Done
                 // 文件已经存在，则发送一个错误响应，
                 // 其 ErrorCode 为 6，ErrMsg 为 File already exists。
@@ -422,7 +438,12 @@ int main(int argc, char *argv[]) {
                       // 则从文件中读取下一个 Block 并发送；
                       block_number++;
                       uint8_t *payload = &output[sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr)];
-                      size_t bytes_read = fread(payload, sizeof(uint8_t), 512, current_transfer.fp);
+                      //size_t bytes_read = fread(payload, sizeof(uint8_t), 512, current_transfer.fp);
+                      size_t curr_offset = (block_number - 1) * 512;
+                      size_t bytes_read = current_transfer.file_size - curr_offset;
+                      if(curr_offset > 512)
+                        curr_offset = 512;
+                      memcpy(payload, current_transfer.buffer + curr_offset, bytes_read);
                       // Encapsulates packet
                       tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
                       out_tftp->block_number = htons(block_number);
@@ -433,14 +454,15 @@ int main(int argc, char *argv[]) {
                       if(bytes_read < 512)
                         current_transfer.state = LastAck;
 
-                      memcpy(current_transfer.last_block_data, payload, bytes_read);
+                      // memcpy(current_transfer.last_block_data, payload, bytes_read);
                       current_transfer.last_block_number = block_number;
                       current_transfer.last_block_size = bytes_read;
                     } else if (current_transfer.state == LastAck) {
                       // 如果是 LastAck 状态，说明这次 TFTP 读取请求已经完成，
                       // 关闭文件，
                       // 从 transfers 数组中移除当前传输
-                      fclose(current_transfer.fp);
+                      //fclose(current_transfer.fp);
+                      delete [] current_transfer.buffer;
                       transfers.erase(transfers.begin() + i);
                     }
                   } else {
@@ -449,7 +471,9 @@ int main(int argc, char *argv[]) {
                     // 不相等（例如出现了丢包或者乱序等问题），
                     // 则重新发送最后一个 Block。
                     uint8_t *payload = &output[sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr)];
-                    memcpy(payload, current_transfer.last_block_data, current_transfer.last_block_size);
+                    //memcpy(payload, current_transfer.last_block_data, current_transfer.last_block_size);
+                    size_t curr_offset = (current_transfer.last_block_number - 1) * 512;
+                    memcpy(payload, current_transfer.buffer + curr_offset, current_transfer.last_block_size);
                     // Encapsulates packet
                     tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
                     out_tftp->block_number = htons(current_transfer.last_block_number);
@@ -469,15 +493,18 @@ int main(int argc, char *argv[]) {
                     // 那么写入块到文件中，并发送 ACK。
                     uint16_t block_size = ntohs(udp->uh_ulen) - sizeof(udphdr) - sizeof(tftp_hdr);
                     uint8_t *payload = packet + sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr);
-                    fwrite(payload, sizeof(payload[0]), block_size, current_transfer.fp);
-
+                    //fwrite(payload, sizeof(payload[0]), block_size, current_transfer.fp);
+                    size_t curr_offset = (block_number - 1) * 512;
+                    memcpy(current_transfer.buffer + curr_offset, payload, block_size);
                     current_transfer.last_block_number += 1;
 
                     // 如果块的大小小于 512，说明这是最后一个块，写入文件后，
                     // 关闭文件，发送 ACK，
                     // 从 transfers 数组中移除当前传输
                     if (block_size < 512) {
+                      fwrite(current_transfer.buffer, 1, curr_offset + block_size, current_transfer.fp);
                       fclose(current_transfer.fp);
+                      delete [] current_transfer.buffer;
                       //printf("File received \n");
                       transfers.erase(transfers.begin() + i);
                       tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];

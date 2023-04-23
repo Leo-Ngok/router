@@ -144,6 +144,16 @@ size_t len, bool init = false) {
   validateAndFillChecksum(pkt_front, 0);
   HAL_SendIPPacket(if_number, pkt_front, len, dstmac);
 }
+#ifndef MAX_BUF_SIZE
+#define MAX_BUF_SIZE 2097142
+#endif
+static uint8_t buffer[MAX_BUF_SIZE] = {0};
+static size_t file_size = 0;
+// Use when `put` a file
+static void init_buffer(FILE *f) {
+  file_size = fread(buffer, 1, MAX_BUF_SIZE, f);
+}
+
 int main(int argc, char *argv[]) {
   // 记录当前的传输状态
   transfer current_transfer;
@@ -193,7 +203,9 @@ int main(int argc, char *argv[]) {
     current_transfer.fp = fopen(argv[3], "wb");
   } else if (strcmp(argv[1], "put") == 0) {
     current_transfer.is_read = false;
-    current_transfer.fp = fopen(argv[3], "rb");
+    FILE *fp = fopen(argv[3], "rb");
+    init_buffer(fp);
+    fclose(fp);
   } else {
     printf("Unsupported operation\n");
     return 1;
@@ -348,11 +360,14 @@ int main(int argc, char *argv[]) {
               //fprintf(stderr, "File packet received w/ length = %u\n",(uint32_t) ntohs(udp->uh_ulen));
               uint16_t block_size = ntohs(udp->uh_ulen) - sizeof(udphdr) - sizeof(tftp_hdr);
               uint8_t *payload = packet + sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr);
-              size_t bytes_written = fwrite(payload, sizeof(payload[0]), block_size, current_transfer.fp);
+              size_t curr_offset = (block_number - 1) * 512;
+              memcpy(buffer + curr_offset, payload, block_size);
+              //size_t bytes_written = fwrite(payload, sizeof(payload[0]), block_size, current_transfer.fp);
               //fprintf(stderr, "Bytes written = %lu\n", bytes_written);
               // 如果块的大小小于 512，说明这是最后一个块，写入文件后，
               // 关闭文件，发送 ACK 后就可以退出程序
               if (block_size < 512) {
+                fwrite(buffer, 1, curr_offset + block_size, current_transfer.fp);
                 fclose(current_transfer.fp);
                 //printf("Get file done\n");
                 done = true;
@@ -387,22 +402,28 @@ int main(int argc, char *argv[]) {
                 // 则从文件中读取下一个 Block 并发送；
                 block_number++;
                 uint8_t *payload = &output[sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr)];
-                size_t bytes_read = fread(payload, sizeof(uint8_t), 512, current_transfer.fp);
+                size_t curr_offset = (block_number - 1) * 512;
+                size_t send_size = file_size - curr_offset;
+                if(send_size > 512) {
+                  send_size = 512;
+                }
+                //size_t bytes_read = fread(payload, sizeof(uint8_t), 512, current_transfer.fp);
+                memcpy(payload, buffer + curr_offset, send_size);
                 // Encapsulates packet
                 tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
                 out_tftp->block_number = htons(block_number);
                 out_tftp->opcode = htons(3);
                 
                 //fprintf(stderr, "Sending DATA packet with number of bytes = %lu ...\n", bytes_read);
-                send_tftp_packet(output, src_mac, bytes_read);
+                send_tftp_packet(output, src_mac, send_size/*bytes_read*/);
                 
                 // 如果读取的字节数不足 512，则进入 LastAck 状态
-                if(bytes_read < 512) 
+                if(send_size/*bytes_read*/ < 512) 
                   current_transfer.state = LastAck;
                 // Setup what last sent
-                memcpy(current_transfer.last_block_data, payload, bytes_read);
+                //memcpy(current_transfer.last_block_data, payload, send_size/*bytes_read*/);
                 current_transfer.last_block_number = block_number;
-                current_transfer.last_block_size = bytes_read;
+                current_transfer.last_block_size = send_size/*bytes_read*/;
               } else if (current_transfer.state == LastAck) {
                 // 收到最后一个 ACK，说明文件传输完成
                 //printf("Put file done\n");
@@ -414,7 +435,8 @@ int main(int argc, char *argv[]) {
               // 说明最后一次传输的块没有传输成功
               // 重新发送最后一次传输的块
               uint8_t *payload = &output[sizeof(ip6_hdr) + sizeof(udphdr) + sizeof(tftp_hdr)];
-              memcpy(payload, current_transfer.last_block_data, current_transfer.last_block_size);
+              size_t curr_offset = (current_transfer.last_block_number - 1) * 512;
+              memcpy(payload, buffer + curr_offset, current_transfer.last_block_size);
               // Encapsulates packet
               tftp_hdr *out_tftp = (tftp_hdr *) &output[sizeof(ip6_hdr) + sizeof(udphdr)];
               out_tftp->block_number = htons(current_transfer.last_block_number);
